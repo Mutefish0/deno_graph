@@ -249,7 +249,9 @@ async fn test_dynamic_imports_with_template_arg() {
     let mut loader = MemoryLoader::default();
     let mut file_system = MemoryFileSystem::default();
     for (specifier, text) in &files {
-      file_system.add_file(ModuleSpecifier::parse(specifier).unwrap());
+      if specifier.starts_with("file:///") {
+        file_system.add_file(ModuleSpecifier::parse(specifier).unwrap());
+      }
       loader.add_source_with_text(specifier, text);
     }
     loader.add_source_with_text("file:///dev/main.ts", code);
@@ -443,6 +445,7 @@ await import(`./a/${test}`);
       ("file:///dev/x86_64-pc-windows-msvc.ts", ""),
       ("file:///dev/x86_64-apple-darwin.ts", ""),
       ("file:///dev/aarch64-apple-darwin.ts", ""),
+      ("https://dev/aarch64-apple-darwin.ts", ""),
     ],
     if cfg!(all(
       target_arch = "x86_64",
@@ -475,6 +478,55 @@ await import(`./a/${test}`);
       target_env = "msvc"
     )) {
       vec!["file:///dev/x86_64-pc-windows-msvc.ts"]
+    } else {
+      vec![]
+    },
+  )
+  .await;
+
+  // matching member expression
+  run_test(
+    "
+  await import(`https://dev/${Deno.build.target}.ts`);
+  ",
+    vec![
+      ("https://dev/x86_64-unknown-linux-gnu.ts", ""),
+      ("https://dev/aarch64-unknown-linux-gnu.ts", ""),
+      ("https://dev/x86_64-pc-windows-msvc.ts", ""),
+      ("https://dev/x86_64-apple-darwin.ts", ""),
+      ("https://dev/aarch64-apple-darwin.ts", ""),
+    ],
+    if cfg!(all(
+      target_arch = "x86_64",
+      target_os = "macos",
+      target_vendor = "apple"
+    )) {
+      vec!["https://dev/x86_64-apple-darwin.ts"]
+    } else if cfg!(all(
+      target_arch = "aarch64",
+      target_os = "macos",
+      target_vendor = "apple"
+    )) {
+      vec!["https://dev/aarch64-apple-darwin.ts"]
+    } else if cfg!(all(
+      target_arch = "x86_64",
+      target_os = "linux",
+      target_env = "gnu"
+    )) {
+      vec!["https://dev/x86_64-unknown-linux-gnu.ts"]
+    } else if cfg!(all(
+      target_arch = "aarch64",
+      target_os = "linux",
+      target_env = "gnu"
+    )) {
+      vec!["https://dev/aarch64-unknown-linux-gnu.ts"]
+    } else if cfg!(all(
+      target_arch = "x86_64",
+      target_vendor = "pc",
+      target_os = "windows",
+      target_env = "msvc"
+    )) {
+      vec!["https://dev/x86_64-pc-windows-msvc.ts"]
     } else {
       vec![]
     },
