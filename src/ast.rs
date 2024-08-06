@@ -476,21 +476,97 @@ fn analyze_dependencies(
               DynamicArgument::String(text.to_string())
             }
             deno_ast::dep::DynamicArgument::Template(parts) => {
-              DynamicArgument::Template(
-                parts
-                  .into_iter()
-                  .map(|part| match part {
-                    deno_ast::dep::DynamicTemplatePart::String(text) => {
+              let mut merged_parts: Vec<DynamicTemplatePart> = vec![];
+              let all_parts = parts.into_iter().map(|part| match part {
+                deno_ast::dep::DynamicTemplatePart::String(text) => {
+                  DynamicTemplatePart::String {
+                    value: text.to_string(),
+                  }
+                }
+                deno_ast::dep::DynamicTemplatePart::MemberExpr(
+                  sym,
+                  sym1,
+                  sym2,
+                ) => match (sym.as_str(), sym1.as_str(), sym2.as_str()) {
+                  ("Deno", "build", "target") => {
+                    if cfg!(all(
+                      target_arch = "x86_64",
+                      target_os = "macos",
+                      target_vendor = "apple"
+                    )) {
+                      return DynamicTemplatePart::String {
+                        value: "x86_64-apple-darwin".to_string(),
+                      };
+                    } else if cfg!(all(
+                      target_arch = "aarch64",
+                      target_os = "macos",
+                      target_vendor = "apple"
+                    )) {
+                      return DynamicTemplatePart::String {
+                        value: "aarch64-apple-darwin".to_string(),
+                      };
+                    } else if cfg!(all(
+                      target_arch = "x86_64",
+                      target_os = "linux",
+                      target_env = "gnu"
+                    )) {
+                      return DynamicTemplatePart::String {
+                        value: "x86_64-unknown-linux-gnu".to_string(),
+                      };
+                    } else if cfg!(all(
+                      target_arch = "aarch64",
+                      target_os = "linux",
+                      target_env = "gnu"
+                    )) {
+                      return DynamicTemplatePart::String {
+                        value: "aarch64-unknown-linux-gnu".to_string(),
+                      };
+                    } else if cfg!(all(
+                      target_arch = "x86_64",
+                      target_vendor = "pc",
+                      target_os = "windows",
+                      target_env = "msvc"
+                    )) {
+                      return DynamicTemplatePart::String {
+                        value: "x86_64-pc-windows-msvc".to_string(),
+                      };
+                    } else {
+                      return DynamicTemplatePart::Expr;
+                    }
+                  }
+                  _ => DynamicTemplatePart::Expr,
+                },
+                deno_ast::dep::DynamicTemplatePart::Expr => {
+                  DynamicTemplatePart::Expr
+                }
+              });
+              for part in all_parts {
+                let prev_part = merged_parts.last();
+                match (prev_part, &part) {
+                  (
+                    Some(DynamicTemplatePart::String { value: prev }),
+                    DynamicTemplatePart::String { value: curr },
+                  ) => {
+                    merged_parts.insert(
+                      merged_parts.len() - 1,
                       DynamicTemplatePart::String {
-                        value: text.to_string(),
-                      }
-                    }
-                    deno_ast::dep::DynamicTemplatePart::Expr => {
-                      DynamicTemplatePart::Expr
-                    }
-                  })
-                  .collect(),
-              )
+                        value: format!("{}{}", prev, curr),
+                      },
+                    );
+                    merged_parts.pop();
+                  }
+                  _ => {
+                    merged_parts.push(part);
+                  }
+                }
+              }
+              if let (1, Some(&DynamicTemplatePart::String { ref value })) =
+                (merged_parts.len(), merged_parts.last())
+              {
+                DynamicArgument::String(value.to_string())
+              } else {
+                DynamicArgument::Template(merged_parts)
+              }
             }
             deno_ast::dep::DynamicArgument::Expr => DynamicArgument::Expr,
           },

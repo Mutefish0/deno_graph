@@ -5,6 +5,7 @@
 // out of deno_graph that should be public
 
 use std::cell::RefCell;
+use std::vec;
 
 use deno_ast::ModuleSpecifier;
 use deno_graph::source::CacheSetting;
@@ -428,6 +429,55 @@ await import(`./a/${test}`);
       "file:///dev/other/mod.ts",
       "file:///dev/other/sub_dir/mod.ts",
     ],
+  )
+  .await;
+
+  // matching member expression
+  run_test(
+    "
+  await import(`./${Deno.build.target}.ts`);
+  ",
+    vec![
+      ("file:///dev/x86_64-unknown-linux-gnu.ts", ""),
+      ("file:///dev/aarch64-unknown-linux-gnu.ts", ""),
+      ("file:///dev/x86_64-pc-windows-msvc.ts", ""),
+      ("file:///dev/x86_64-apple-darwin.ts", ""),
+      ("file:///dev/aarch64-apple-darwin.ts", ""),
+    ],
+    if cfg!(all(
+      target_arch = "x86_64",
+      target_os = "macos",
+      target_vendor = "apple"
+    )) {
+      vec!["file:///dev/x86_64-apple-darwin.ts"]
+    } else if cfg!(all(
+      target_arch = "aarch64",
+      target_os = "macos",
+      target_vendor = "apple"
+    )) {
+      vec!["file:///dev/aarch64-apple-darwin.ts"]
+    } else if cfg!(all(
+      target_arch = "x86_64",
+      target_os = "linux",
+      target_env = "gnu"
+    )) {
+      vec!["file:///dev/x86_64-unknown-linux-gnu.ts"]
+    } else if cfg!(all(
+      target_arch = "aarch64",
+      target_os = "linux",
+      target_env = "gnu"
+    )) {
+      vec!["file:///dev/aarch64-unknown-linux-gnu.ts"]
+    } else if cfg!(all(
+      target_arch = "x86_64",
+      target_vendor = "pc",
+      target_os = "windows",
+      target_env = "msvc"
+    )) {
+      vec!["file:///dev/x86_64-pc-windows-msvc.ts"]
+    } else {
+      vec![]
+    },
   )
   .await;
 }
